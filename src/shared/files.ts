@@ -86,3 +86,17 @@ export async function readExisting(absolute: string, maxBytes: number): Promise<
     return undefined
   }
 }
+
+/**
+ * Serialize a value with object keys sorted, so two tool calls with the same
+ * arguments in a different key order produce the same text. Used to recognise
+ * an identical retry: models often resend an edit with its keys reordered.
+ * @param value - JSON-compatible value (tool arguments).
+ * @returns canonical JSON text.
+ */
+export function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) =>
+    v !== null && typeof v === 'object' && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v)
+}

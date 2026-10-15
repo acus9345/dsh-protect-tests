@@ -17,7 +17,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { detectTamper, detectTestScriptTamper, SIGNAL_KINDS, type Signal, type SignalKind } from './detect.ts'
-import { fileMutation, readExisting, resolvePath, workspaceOf } from './shared/files.ts'
+import { canonicalJson, fileMutation, readExisting, resolvePath, workspaceOf } from './shared/files.ts'
 import { matchesAny } from './shared/glob.ts'
 
 export { detectTamper, detectTestScriptTamper, SIGNAL_KINDS } from './detect.ts'
@@ -117,7 +117,7 @@ export function apply(ctx: Context, config: Config): void {
   }
 
   ctx.on('tools/pre-execute', async (exec: ToolExecution, next: () => Promise<PreToolDecision>) => {
-    const key = createHash('sha256').update(`${exec.name}\0${JSON.stringify(exec.arguments)}\0${workspaceOf(exec)}`).digest('hex')
+    const key = createHash('sha256').update(`${exec.name}\0${canonicalJson(exec.arguments)}\0${workspaceOf(exec)}`).digest('hex')
     if (config.allowIdenticalRetry && pending.delete(key)) return next()
 
     if (shellTools.has(exec.name) && config.guardDeletes) {

@@ -42,7 +42,7 @@ const SKIP = [
   /\bXCTSkip(?:If|Unless)?\b/,
 ]
 
-const ASSERT = /\b(?:expect|assert\w*|assume\w*|should|must|require\.\w+|t\.(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)|XCTAssert\w*|assert_\w+!?|Assert\.\w+|Assertions\.\w+|verify|check)\s*\(|\bassert\s+[^=\s]|\.should\.|\.to\.(?:be|equal|eql|have|include|deep|throw)\b|\bexpect\s*\{|\bassert!\s*\(|\b(?:expect|assert|check|verify)[A-Z]\w*\s*\(/g
+const ASSERT = /\b(?:expect|assert(?:\.\w+|\w*)|assume\w*|should|must|require\.\w+|t\.(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)|XCTAssert\w*|assert_\w+!?|Assert\.\w+|Assertions\.\w+|verify|check)\s*\(|\bassert\s+[^=\s]|\.should\.|\.to\.(?:be|equal|eql|have|include|deep|throw)\b|\bexpect\s*\{|\bassert!\s*\(|\b(?:expect|assert|check|verify)[A-Z]\w*\s*\(/g
 
 const TEST_DECL = /(?:^|[^.\w])x?(?:it|test|specify|scenario)(?:\.(?:skip|only|todo|fails|concurrent|sequential))?\s*\(\s*['"`]|^\s*(?:async\s+)?def\s+test_?\w*\s*\(|^\s*func\s+Test\w*\s*\(|@Test\b|#\[(?:tokio::)?test\]|\[(?:Fact|Theory|Test|TestMethod|TestCase)\b|^\s*it\s+['"]|^\s*(?:public\s+)?(?:void|fun)\s+test\w*\s*\(/gm
 
@@ -64,7 +64,24 @@ const TRIVIAL = [
   /assert!\s*\(\s*true\s*\)/,
 ]
 
-const WEAK = /\.(?:toBeDefined|toBeTruthy|not\.toBeNull|not\.toBeUndefined|toBeInstanceOf\(Object\))\s*\(\s*\)|\bassert(?:IsNotNone|NotNull|Truthy)\s*\(|\bassert\s+\w+(?:\.\w+)*\s+is\s+not\s+None\b/g
+// A value under test: a name or member chain, optionally with simple calls (`sum(1, 2)`, `a.b().c`).
+const VALUE = String.raw`[\w$]+(?:\([^()]*\))?(?:\.[\w$]+(?:\([^()]*\))?)*`
+const NOTHING = String.raw`(?:undefined|null|'undefined'|"undefined")`
+
+// Existence/truthiness checks: Jest, node:assert (`assert.ok(x !== undefined)`,
+// `assert.notEqual(f(x), null)`, `assert.ok(x)` on a bare name), Chai, Python.
+const WEAK = new RegExp([
+  String.raw`\.(?:toBeDefined|toBeTruthy|not\.toBeNull|not\.toBeUndefined|toBeInstanceOf\(Object\))\s*\(\s*\)`,
+  String.raw`\.not\.(?:toBe|toEqual|toStrictEqual)\s*\(\s*(?:undefined|null)\s*\)`,
+  String.raw`\bassert(?:IsNotNone|NotNull|Truthy)\s*\(`,
+  String.raw`\bassert\s+\w+(?:\.\w+)*\s+is\s+not\s+None\b`,
+  String.raw`\bassert(?:\.ok)?\s*\(\s*(?:typeof\s+)?${VALUE}\s*!==?\s*${NOTHING}\s*[,)]`,
+  String.raw`\bassert(?:\.ok)?\s*\(\s*${NOTHING}\s*!==?\s*(?:typeof\s+)?${VALUE}\s*[,)]`,
+  String.raw`\bassert\.(?:notEqual|notStrictEqual|notDeepEqual)\s*\(\s*${VALUE}\s*,\s*(?:undefined|null)\s*[,)]`,
+  String.raw`\bassert(?:\.ok)?\s*\(\s*[\w$]+(?:\.[\w$]+)*\s*\)`,
+  String.raw`\.to\.(?:exist|be\.ok|not\.be\.(?:undefined|null))\b`,
+  String.raw`\.not\.to\.be\.(?:undefined|null)\b`,
+].join('|'), 'g')
 
 const COMMENTED_ASSERT = /^\s*(?:\/\/+|#+|--|\/\*+)\s*(?:await\s+)?(?:expect\s*\(|assert\w*[\s(]|self\.assert\w*\(|t\.(?:Error|Fatal)|XCTAssert|assert_eq!|Assert\.)/
 

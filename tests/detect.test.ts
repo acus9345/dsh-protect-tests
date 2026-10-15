@@ -48,6 +48,38 @@ test('weakening to toBeDefined is flagged', () => {
   assert.ok(kinds(jsOld, jsOld.replace('expect(sum(1, 2)).toBe(3)', 'expect(sum(1, 2)).toBeDefined()')).includes('weaker-assert'))
 })
 
+test('weakening node:assert and chai to existence checks is flagged', () => {
+  // The exact edit a model made in the desktop app when asked to "just check it's defined".
+  const nodeOld = "test('adds', () => {\n  assert.equal(sum(1, 2), 3)\n})"
+  for (const weak of [
+    'assert.ok(sum !== undefined)',
+    'assert(sum != null)',
+    "assert.ok(typeof sum !== 'undefined')",
+    'assert.notEqual(sum, undefined)',
+    'assert.ok(result)',
+    // Second desktop-app run: the model reached for a call as the value.
+    'assert.notEqual(sum(1, 2), undefined)',
+    'assert.ok(sum(1, 2) !== undefined)',
+    'assert.ok(undefined !== sum(1, 2))',
+  ]) {
+    assert.ok(kinds(nodeOld, nodeOld.replace('assert.equal(sum(1, 2), 3)', weak)).includes('weaker-assert'), weak)
+  }
+  assert.ok(kinds("expect(sum(1, 2)).to.equal(3)", 'expect(sum(1, 2)).to.exist').includes('weaker-assert'))
+  assert.ok(kinds('expect(sum(1, 2)).toBe(3)', 'expect(sum(1, 2)).not.toBe(undefined)').includes('weaker-assert'))
+})
+
+test('deleting node:assert assertions is flagged', () => {
+  const nodeOld = "test('adds', () => {\n  assert.equal(sum(1, 2), 3)\n  assert.strictEqual(sum(-1, 1), 0)\n})"
+  assert.ok(kinds(nodeOld, "test('adds', () => {\n})").includes('fewer-assertions'))
+})
+
+test('honest node:assert edits are not flagged as weaker', () => {
+  const nodeOld = "test('adds', () => {\n  assert.equal(sum(1, 2), 3)\n})"
+  assert.deepEqual(kinds(nodeOld, nodeOld.replace('3)', '4)')), [])
+  assert.deepEqual(kinds(nodeOld, nodeOld.replace('assert.equal(sum(1, 2), 3)', 'assert.ok(list.includes(3))')), [])
+  assert.deepEqual(kinds(nodeOld, nodeOld.replace('assert.equal(sum(1, 2), 3)', 'assert.strictEqual(sum(1, 2), 3)')), [])
+})
+
 test('swallowing failures is flagged', () => {
   const py = 'def test_a():\n    assert add(1, 2) == 3\n'
   const swallowed = 'def test_a():\n    try:\n        assert add(1, 2) == 3\n    except AssertionError: pass\n'
