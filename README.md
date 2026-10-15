@@ -16,10 +16,10 @@ repeat the identical call once to confirm.
 ## Install
 
 ```sh
-dsh plugin --profile tui add dsh-protect-tests
+dsh plugin --profile web add dsh-protect-tests
 ```
 
-Use your own profile name in place of `tui`. It's on as soon as it's installed. Remove it with `dsh plugin --profile tui remove dsh-protect-tests`.
+That's the `web` profile, the browser UI you start with `dsh web`. If you run DSH another way, use `headless` (scripts and CI) or `acp` (editor integrations) instead. Each profile keeps its own plugin list, so add it to every profile you use. It's on as soon as it's installed. Remove it with `dsh plugin --profile web remove dsh-protect-tests`.
 
 ### From a clone
 
@@ -30,7 +30,7 @@ git clone https://github.com/acus9345/dsh-protect-tests
 cd dsh-protect-tests
 npm install
 npm pack
-dsh plugin --profile tui add ./dsh-protect-tests-0.1.0.tgz
+dsh plugin --profile web add ./dsh-protect-tests-0.1.0.tgz
 ```
 
 ## What it notices
@@ -43,6 +43,8 @@ dsh plugin --profile tui add ./dsh-protect-tests-0.1.0.tgz
 - **Weaker assertions.** Swapping a specific check for `toBeDefined()`, `toBeTruthy()`, `is not None` and the like.
 - **Deleted test files.** `rm`, `git rm` or `unlink` on a test file or test folder from the shell.
 - **A test script that can't fail.** Changing `"test"` in `package.json` to `echo`, `exit 0`, `... || true`, or adding `--passWithNoTests`.
+
+On Windows, PowerShell deletes (`Remove-Item`, `del`, `rd`) count too.
 
 Test files are found by name: `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`, `*Test.java`, `conftest.py`, anything under `tests/`, `__tests__/`, `spec/` or `e2e/`, and so on. You can change the list.
 
@@ -72,7 +74,7 @@ Add a row like this to `~/.dsh/profiles/<profile>/cordis.patch.yml`, or to `~/.d
     guardDeletes: true          # watch rm / git rm of test files
     guardTestScript: true       # watch package.json "test"
     allowIdenticalRetry: true   # false: a refusal is final
-    shellTools: [bash]
+    shellTools: [bash, pwsh]   # pwsh is the shell DSH uses on Windows
 ```
 
 ## Development

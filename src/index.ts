@@ -62,7 +62,7 @@ export const Config: Schema<Config> = Schema.object({
   guardDeletes: Schema.boolean().default(true),
   guardTestScript: Schema.boolean().default(true),
   allowIdenticalRetry: Schema.boolean().default(true),
-  shellTools: Schema.array(Schema.string()).default(['bash']),
+  shellTools: Schema.array(Schema.string()).default(['bash', 'pwsh']),
   maxFileBytes: Schema.natural().default(2_000_000),
 }) as Schema<Config>
 
@@ -82,15 +82,16 @@ export function denialText(target: string, signals: readonly Signal[], retryAllo
     + (retryAllowed ? FOOTER_RETRY : 'If the test really must change, ask the user first.')
 }
 
-/** Paths an `rm`/`git rm`/`unlink` command would delete. */
+/** Paths an `rm`/`git rm`/`unlink` (or PowerShell `Remove-Item`/`del`) command would delete. */
 export function deletedPaths(command: string): string[] {
   const out: string[] = []
-  const re = /(?:^|[;&|(]\s*|\s(?:sudo|xargs)\s+)(?:git\s+rm|rm|unlink|trash|shred)\s+([^;&|)\n]+)/g
+  const re = /(?:^|[;&|(]\s*|\s(?:sudo|xargs)\s+)(?:git\s+rm|rm|unlink|trash|shred|remove-item|ri|del|erase|rd|rmdir)\s+([^;&|)\n]+)/gi
   for (const m of command.matchAll(re)) {
     for (const word of m[1]!.trim().split(/\s+/)) {
       const w = word.replace(/^['"]|['"]$/g, '')
-      if (w.length === 0 || w.startsWith('-') || w === '--' || /^[<>]/.test(w)) continue
-      out.push(w)
+      if (w.length === 0 || w.startsWith('-') || w.startsWith('/') && /^\/[a-z]$/i.test(w) || w === '--' || /^[<>]/.test(w)) continue
+      // `.\\tests\\a.test.ts` and `tests/a.test.ts` are the same path to us.
+      out.push(w.replaceAll('\\', '/'))
     }
   }
   return out

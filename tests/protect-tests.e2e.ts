@@ -46,3 +46,16 @@ test('works when installed with `dsh plugin add`', async () => {
   assert.equal(run.exitCode, 0, run.stderr)
   assert.match(run.toolResults[0]!.result, /protect-tests blocked/)
 })
+
+test('guards the pwsh tool too (the shell DSH uses on Windows)', async () => {
+  const run = await runDsh({
+    plugins: [plugin],
+    homePatch: '- id: tool-pwsh\n  disabled: false\n- id: tool-bash\n  disabled: true\n',
+    files: { 'src/sum.test.ts': spec },
+    readAfter: ['src/sum.test.ts'],
+    script: [{ tool: 'pwsh', input: { description: 'Delete test', command: 'Remove-Item .\\src\\sum.test.ts -Force' } }],
+  })
+  assert.equal(run.exitCode, 0, run.stderr)
+  assert.match(run.toolResults[0]!.result, /protect-tests blocked/)
+  assert.equal(run.filesAfter['src/sum.test.ts'], spec)
+})

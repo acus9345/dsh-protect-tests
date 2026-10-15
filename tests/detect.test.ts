@@ -104,3 +104,10 @@ test('dropping checks without a structural replacement is still caught', () => {
   const kinds = detectTamper(three, "test('r', () => {\n  expect(res.ok).toBe(true)\n})\n", opts).map(s => s.kind)
   assert.ok(kinds.includes('fewer-assertions'), kinds.join())
 })
+
+test('PowerShell deletes are seen', () => {
+  assert.deepEqual(deletedPaths('Remove-Item .\\src\\sum.test.ts -Force'), ['./src/sum.test.ts'])
+  assert.deepEqual(deletedPaths('del tests\\a.test.js; npm test'), ['tests/a.test.js'])
+  assert.deepEqual(deletedPaths('Remove-Item -Recurse -Force tests'), ['tests'])
+  assert.deepEqual(deletedPaths('rd /s /q __tests__'), ['__tests__'])
+})
