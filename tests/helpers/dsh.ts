@@ -16,7 +16,11 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const dshBin = join(repoRoot, 'node_modules', '.bin', 'dsh')
+// Run dsh's JS entry with this Node, so the helper works the same on Windows (no .cmd shims).
+const dshEntry = join(repoRoot, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+const windows = process.platform === 'win32'
+/** The shell tool DSH offers on this platform: `pwsh` on Windows, `bash` elsewhere. */
+export const shellTool = windows ? 'pwsh' : 'bash'
 
 /** One scripted model response: a single tool call, or final text. */
 export type ScriptedTurn =
@@ -165,7 +169,7 @@ export async function runDsh(options: RunOptions): Promise<RunResult> {
   }
   const env = { ...process.env, DSH_HOME: home }
   if (options.installed === true) {
-    await run('npx', ['dsh', 'plugin', '--profile', 'headless', 'add', await packed()], { cwd: repoRoot, env })
+    await run(process.execPath, [dshEntry, 'plugin', '--profile', 'headless', 'add', await packed()], { cwd: repoRoot, env })
   }
   if (options.homePatch !== undefined) await writeFile(join(home, 'cordis.patch.yml'), options.homePatch)
   const rows = (options.plugins ?? []).map(p => [
@@ -179,9 +183,11 @@ export async function runDsh(options: RunOptions): Promise<RunResult> {
     await writeFile(patch, `- insert:\n${rows.join('\n')}\n`)
     patchArgs.push('--patch', patch)
   }
-  const model = await startScriptedModel(options.script)
+  // Tests are written against `bash`; on Windows the same calls go to `pwsh`, the shell DSH offers there.
+  const script = windows ? options.script.map(t => ('tool' in t && t.tool === 'bash' ? { ...t, tool: 'pwsh' } : t)) : options.script
+  const model = await startScriptedModel(script)
   try {
-    const child = spawn(dshBin, ['headless', ...patchArgs, '--json', options.task ?? 'do the task'], {
+    const child = spawn(process.execPath, [dshEntry, 'headless', ...patchArgs, '--json', options.task ?? 'do the task'], {
       cwd: workspace,
       env: {
         ...env,
@@ -223,7 +229,8 @@ export const pluginEntry = join(repoRoot, 'lib', 'index.js')
 
 function run(cmd: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }): Promise<string> {
   return new Promise((done, fail) => {
-    execFile(cmd, args, { ...options, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    // npm is a .cmd shim on Windows, which only runs through a shell.
+    execFile(cmd, args, { ...options, maxBuffer: 16 * 1024 * 1024, shell: windows && cmd === 'npm' }, (error, stdout, stderr) => {
       if (error !== null) fail(new Error(`${cmd} ${args.join(' ')} failed:\n${stdout}\n${stderr}`))
       else done(stdout)
     })
