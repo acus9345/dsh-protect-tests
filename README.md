@@ -34,7 +34,7 @@ Use your own profile name in place of `tui`. It's on as soon as it's installed. 
 
 Test files are found by name: `*.test.*`, `*.spec.*`, `*_test.*`, `test_*.py`, `*Test.java`, `conftest.py`, anything under `tests/`, `__tests__/`, `spec/` or `e2e/`, and so on. You can change the list.
 
-Normal test work isn't affected. Adding tests, adding assertions, renaming, refactoring setup code and fixing a typo in a test name all go through without a word.
+Normal test work isn't affected. Adding tests, adding assertions, renaming, refactoring setup code and fixing a typo in a test name all go through without a word. Refactors that look like losses on paper also go through, for example folding five near-identical tests into one `test.each` / `@pytest.mark.parametrize` / `t.Run` table, or merging three `toBe` checks into one `toEqual({...})` or a helper like `expectUser(...)`.
 
 ## When the test really is wrong
 
