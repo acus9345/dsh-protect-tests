@@ -89,7 +89,6 @@ test('deletedPaths finds rm targets', () => {
   assert.deepEqual(deletedPaths('echo hi'), [])
 })
 
-const opts = { minAssertionsRemoved: 2, minTestsRemoved: 1 }
 
 test('honest refactors pass: table-driven tests, merged checks, helpers', () => {
   const two = "test('adds 1', () => {\n  expect(sum(1, 1)).toBe(2)\n})\ntest('adds 2', () => {\n  expect(sum(2, 2)).toBe(4)\n})\n"
