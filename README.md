@@ -3,7 +3,7 @@
 Tell an agent "make the tests pass" and sometimes it does exactly that, just not the way you meant. A failing test gets `.skip`. An assertion gets commented out. `expect(total).toBe(42)` turns into `expect(total).toBeDefined()`. The run goes green and the bug is still there.
 
 This [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin looks at every edit to a test file before it's applied, comparing the old text with the new. If the change makes the tests check less, the edit is refused and the model is told what it did:
-
+(haha claude is so useful i mean like idk)
 ```
 dsh-protect-tests blocked this change to src/sum.test.ts because it makes the tests check less:
 - replaces specific assertions with existence/truthiness checks (0 → 1): `expect(sum(1, 2)).toBeDefined()`
