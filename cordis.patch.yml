@@ -1,0 +1,14 @@
+# dsh-protect-tests: block edits that make tests check less.
+# Override by restating this row's whole `config` in a later layer:
+#
+# - id: protect-tests
+#   config:
+#     mode: deny                 # or ask
+#     minAssertionsRemoved: 2
+#     disabledSignals: []        # skip, fewer-assertions, fewer-tests, trivial-assert,
+#                                # commented-assert, swallowed-failure, weaker-assert
+#     guardDeletes: true
+#     guardTestScript: true
+- insert:
+    - id: protect-tests
+      name: dsh-protect-tests
