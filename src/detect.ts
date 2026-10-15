@@ -42,9 +42,15 @@ const SKIP = [
   /\bXCTSkip(?:If|Unless)?\b/,
 ]
 
-const ASSERT = /\b(?:expect|assert\w*|assume\w*|should|must|require\.\w+|t\.(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)|XCTAssert\w*|assert_\w+!?|Assert\.\w+|Assertions\.\w+|verify|check)\s*\(|\bassert\s+[^=\s]|\.should\.|\.to\.(?:be|equal|eql|have|include|deep|throw)\b|\bexpect\s*\{|\bassert!\s*\(/g
+const ASSERT = /\b(?:expect|assert\w*|assume\w*|should|must|require\.\w+|t\.(?:Error|Errorf|Fatal|Fatalf|Fail|FailNow)|XCTAssert\w*|assert_\w+!?|Assert\.\w+|Assertions\.\w+|verify|check)\s*\(|\bassert\s+[^=\s]|\.should\.|\.to\.(?:be|equal|eql|have|include|deep|throw)\b|\bexpect\s*\{|\bassert!\s*\(|\b(?:expect|assert|check|verify)[A-Z]\w*\s*\(/g
 
 const TEST_DECL = /(?:^|[^.\w])x?(?:it|test|specify|scenario)(?:\.(?:skip|only|todo|fails|concurrent|sequential))?\s*\(\s*['"`]|^\s*(?:async\s+)?def\s+test_?\w*\s*\(|^\s*func\s+Test\w*\s*\(|@Test\b|#\[(?:tokio::)?test\]|\[(?:Fact|Theory|Test|TestMethod|TestCase)\b|^\s*it\s+['"]|^\s*(?:public\s+)?(?:void|fun)\s+test\w*\s*\(/gm
+
+/** Table-driven tests: one declaration that runs many cases. */
+const PARAMETRIZED = /\b(?:it|test|describe)\.each\s*[([`]|@pytest\.mark\.parametrize\b|\bt\.Run\s*\(|@ParameterizedTest\b|\[(?:Theory|TestCase|DataRow|InlineData)\b|@TestCase\b|#\[case\b|\bwhere:\s*$/gm
+
+/** Assertions that check many values at once: whole-object matchers, snapshots, custom helpers. */
+const STRUCTURAL = /\.(?:toEqual|toStrictEqual|toMatchObject|toMatchSnapshot|toMatchInlineSnapshot|toHaveProperty)\s*\(|\.to\.(?:deep|eql)\b|\b(?:deepEqual|deepStrictEqual|assertDictEqual|assertListEqual|assertCountEqual|assert_eq!|assert_matches!)\s*\(|\bassert(?:Equal|Equals)?\s*\(?.*[,=]=?\s*[[{(]|\bassert\s+.+==\s*[[{(]|\b(?:expect|assert|check|verify)[A-Z]\w*\s*\(/
 
 const TRIVIAL = [
   /expect\s*\(\s*(true|false|1|0|null|undefined|'[^']*'|"[^"]*")\s*\)\s*\.\s*(?:toBe|toEqual|toStrictEqual|to\.equal|to\.be\.(?:true|false))\s*\(\s*\1\s*\)/,
@@ -129,12 +135,15 @@ export function detectTamper(oldText: string, newText: string, options: TamperOp
   const assertsAfter = count(newLive, ASSERT)
   const testsBefore = count(oldLive, TEST_DECL)
   const testsAfter = count(newLive, TEST_DECL)
-  if (testsBefore - testsAfter >= options.minTestsRemoved) {
+  // Folding several tests into one table-driven test is a refactor, not a loss.
+  const parametrizedAdded = count(newLive, PARAMETRIZED) > count(oldLive, PARAMETRIZED)
+  if (testsBefore - testsAfter >= options.minTestsRemoved && !parametrizedAdded) {
     add({ kind: 'fewer-tests', detail: `test cases ${testsBefore} → ${testsAfter}`, examples: [] })
   }
   const removed = assertsBefore - assertsAfter
-  if (removed >= options.minAssertionsRemoved || (assertsBefore > 0 && assertsAfter === 0 && testsAfter > 0)) {
-    // Removing whole tests already explains lost assertions; only report the rest.
+  // Merging checks into one structural assertion or a helper adds a new assertion line; plain deletion adds none.
+  const addedAsserts = newLines(oldLive, newLive, [(l: string) => STRUCTURAL.test(l)]).length
+  if ((removed >= options.minAssertionsRemoved && addedAsserts === 0 && !parametrizedAdded) || (assertsBefore > 0 && assertsAfter === 0 && testsAfter > 0)) {
     add({ kind: 'fewer-assertions', detail: `assertions ${assertsBefore} → ${assertsAfter}`, examples: [] })
   }
 

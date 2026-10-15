@@ -88,3 +88,20 @@ test('deletedPaths finds rm targets', () => {
   assert.deepEqual(deletedPaths('git rm -r tests/'), ['tests/'])
   assert.deepEqual(deletedPaths('echo hi'), [])
 })
+
+const opts = { minAssertionsRemoved: 2, minTestsRemoved: 1 }
+
+test('honest refactors pass: table-driven tests, merged checks, helpers', () => {
+  const two = "test('adds 1', () => {\n  expect(sum(1, 1)).toBe(2)\n})\ntest('adds 2', () => {\n  expect(sum(2, 2)).toBe(4)\n})\n"
+  assert.deepEqual(detectTamper(two, "test.each([[1, 2], [2, 4]])('adds %i', (a, want) => {\n  expect(sum(a, a)).toBe(want)\n})\n", opts), [])
+  assert.deepEqual(detectTamper('def test_one():\n    assert f(1) == 1\n\ndef test_two():\n    assert f(2) == 2\n', "@pytest.mark.parametrize('n', [1, 2])\ndef test_f(n):\n    assert f(n) == n\n", opts), [])
+  const three = "test('p', () => {\n  expect(p.x).toBe(1)\n  expect(p.y).toBe(2)\n  expect(p.z).toBe(3)\n})\n"
+  assert.deepEqual(detectTamper(three, "test('p', () => {\n  expect(p).toEqual({ x: 1, y: 2, z: 3 })\n})\n", opts), [])
+  assert.deepEqual(detectTamper(three, "test('p', () => {\n  expectPoint(p, 1, 2, 3)\n})\n", opts), [])
+})
+
+test('dropping checks without a structural replacement is still caught', () => {
+  const three = "test('r', () => {\n  expect(res.body.id).toBe(7)\n  expect(res.body.name).toBe('a')\n  expect(res.status).toBe(200)\n})\n"
+  const kinds = detectTamper(three, "test('r', () => {\n  expect(res.ok).toBe(true)\n})\n", opts).map(s => s.kind)
+  assert.ok(kinds.includes('fewer-assertions'), kinds.join())
+})
