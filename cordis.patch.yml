@@ -1,5 +1,7 @@
 # dsh-protect-tests: block edits that make tests check less.
-# Override by restating this row's whole `config` in a later layer:
+# To change settings, add a row like the one below to
+# ~/.dsh/profiles/<profile>/cordis.patch.yml (one profile) or ~/.dsh/cordis.patch.yml
+# (every profile). Keys you leave out keep their defaults.
 #
 # - id: protect-tests
 #   config:
