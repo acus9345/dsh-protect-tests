@@ -21,6 +21,18 @@ dsh plugin --profile tui add dsh-protect-tests
 
 Use your own profile name in place of `tui`. It's on as soon as it's installed. Remove it with `dsh plugin --profile tui remove dsh-protect-tests`.
 
+### From a clone
+
+Before the package is on npm, or to try local changes, build a tarball and install that:
+
+```sh
+git clone https://github.com/acus9345/dsh-protect-tests
+cd dsh-protect-tests
+npm install
+npm pack
+dsh plugin --profile tui add ./dsh-protect-tests-0.1.0.tgz
+```
+
 ## What it notices
 
 - **New skips.** `it.skip`, `test.only`, `xit`, `xdescribe`, `@pytest.mark.skip` / `xfail`, `@unittest.skip`, `t.Skip()`, `@Disabled`, `#[ignore]`, and the equivalents in xUnit, RSpec, PHPUnit and XCTest.
@@ -73,4 +85,4 @@ npm run test:e2e   # real dsh runs against a scripted local model, no API key ne
 
 The install test runs `dsh plugin add`, which needs `pnpm` on your PATH.
 
-MIT licensed.
+MIT licensed. Written by [acus9345](https://github.com/acus9345). Bug reports and ideas are welcome in the issues.
