@@ -19,6 +19,7 @@ import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import { detectTamper, detectTestScriptTamper, SIGNAL_KINDS, type Signal, type SignalKind } from './detect.ts'
 import { canonicalJson, fileMutation, readExisting, resolvePath, workspaceOf } from './shared/files.ts'
 import { matchesAny } from './shared/glob.ts'
+import { resolveConfig } from './shared/live.ts'
 
 export { detectTamper, detectTestScriptTamper, SIGNAL_KINDS } from './detect.ts'
 export type { Signal, SignalKind, TamperOptions } from './detect.ts'
@@ -53,18 +54,20 @@ export interface Config {
   maxFileBytes: number
 }
 
+// Every field is `.volatile()` so the settings page on DSH's Plugins page can
+// change it live; `apply` reads the current values on each call.
 export const Config: Schema<Config> = Schema.object({
-  mode: Schema.union(['deny', 'ask']).default('deny'),
-  testFiles: Schema.array(Schema.string()).default([...DEFAULT_TEST_GLOBS]),
-  minAssertionsRemoved: Schema.natural().min(1).default(2),
-  minTestsRemoved: Schema.natural().min(1).default(1),
-  disabledSignals: Schema.array(Schema.union([...SIGNAL_KINDS])).default([]),
-  guardDeletes: Schema.boolean().default(true),
-  guardTestScript: Schema.boolean().default(true),
-  allowIdenticalRetry: Schema.boolean().default(true),
-  shellTools: Schema.array(Schema.string()).default(['bash', 'pwsh']),
-  maxFileBytes: Schema.natural().default(2_000_000),
-}) as Schema<Config>
+  mode: Schema.union(['deny', 'ask']).default('deny').volatile(),
+  testFiles: Schema.array(Schema.string()).default([...DEFAULT_TEST_GLOBS]).volatile(),
+  minAssertionsRemoved: Schema.natural().min(1).default(2).volatile(),
+  minTestsRemoved: Schema.natural().min(1).default(1).volatile(),
+  disabledSignals: Schema.array(Schema.union([...SIGNAL_KINDS])).default([]).volatile(),
+  guardDeletes: Schema.boolean().default(true).volatile(),
+  guardTestScript: Schema.boolean().default(true).volatile(),
+  allowIdenticalRetry: Schema.boolean().default(true).volatile(),
+  shellTools: Schema.array(Schema.string()).default(['bash', 'pwsh']).volatile(),
+  maxFileBytes: Schema.natural().default(2_000_000).volatile(),
+}) as unknown as Schema<Config>
 
 const FOOTER_RETRY = 'If the test itself is wrong (the requirement changed, or it tested a bug), tell the user which test you are changing and why, then repeat the identical call once to confirm.'
 
@@ -103,48 +106,47 @@ export function apply(ctx: Context, config: Config): void {
     pending.add(key)
     if (pending.size > 200) pending.delete(pending.values().next().value!)
   }
-  const isTestFile = (rel: string): boolean => !rel.startsWith('../') && matchesAny(rel, config.testFiles)
-  const shellTools = new Set(config.shellTools)
-
-  const decide = (key: string, target: string, signals: Signal[], next: () => Promise<PreToolDecision>): Promise<PreToolDecision> | PreToolDecision => {
+  const decide = (cfg: Config, key: string, target: string, signals: Signal[], next: () => Promise<PreToolDecision>): Promise<PreToolDecision> | PreToolDecision => {
     if (signals.length === 0) return next()
-    const text = denialText(target, signals, config.allowIdenticalRetry)
-    if (config.mode === 'ask') {
+    const text = denialText(target, signals, cfg.allowIdenticalRetry)
+    if (cfg.mode === 'ask') {
       return { kind: 'ask', reason: text, displayReason: { en: `This change weakens tests in ${target}: ${signals.map(s => s.detail).join('; ')}.` } }
     }
-    if (config.allowIdenticalRetry) remember(key)
+    if (cfg.allowIdenticalRetry) remember(key)
     return { kind: 'deny', reason: text }
   }
 
   ctx.on('tools/pre-execute', async (exec: ToolExecution, next: () => Promise<PreToolDecision>) => {
+    const cfg = resolveConfig(config)
+    const isTestFile = (rel: string): boolean => !rel.startsWith('../') && matchesAny(rel, cfg.testFiles)
     const key = createHash('sha256').update(`${exec.name}\0${canonicalJson(exec.arguments)}\0${workspaceOf(exec)}`).digest('hex')
-    if (config.allowIdenticalRetry && pending.delete(key)) return next()
+    if (cfg.allowIdenticalRetry && pending.delete(key)) return next()
 
-    if (shellTools.has(exec.name) && config.guardDeletes) {
+    if (cfg.shellTools.includes(exec.name) && cfg.guardDeletes) {
       const command = (exec.arguments as { command?: unknown } | null)?.command
       if (typeof command !== 'string') return next()
       const workspace = workspaceOf(exec)
       const hits = deletedPaths(command).map(p => resolvePath(p, workspace).relative).filter(rel => isTestFile(rel) || isTestFile(`${rel}/x.test.js`) || /(^|\/)(tests?|__tests__|spec)$/.test(rel))
       if (hits.length === 0) return next()
-      return decide(key, `\`${command}\``, [{ kind: 'fewer-tests', detail: `deletes test files: ${hits.slice(0, 5).join(', ')}`, examples: [] }], next)
+      return decide(cfg, key, `\`${command}\``, [{ kind: 'fewer-tests', detail: `deletes test files: ${hits.slice(0, 5).join(', ')}`, examples: [] }], next)
     }
 
     const mutation = fileMutation(exec)
     if (mutation === undefined) return next()
     const { absolute, relative } = resolvePath(mutation.path, workspaceOf(exec))
-    const previous = mutation.kind === 'write' ? (await readExisting(absolute, config.maxFileBytes)) ?? '' : mutation.oldText ?? ''
+    const previous = mutation.kind === 'write' ? (await readExisting(absolute, cfg.maxFileBytes)) ?? '' : mutation.oldText ?? ''
 
-    if (config.guardTestScript && basename(relative) === 'package.json') {
+    if (cfg.guardTestScript && basename(relative) === 'package.json') {
       // Edits carry only a span; compare the span or the whole manifest.
       const signal = detectTestScriptTamper(previous, mutation.newText)
-      return decide(key, relative, signal === undefined ? [] : [signal], next)
+      return decide(cfg, key, relative, signal === undefined ? [] : [signal], next)
     }
     if (!isTestFile(relative)) return next()
     const signals = detectTamper(previous, mutation.newText, {
-      minAssertionsRemoved: config.minAssertionsRemoved,
-      minTestsRemoved: config.minTestsRemoved,
-      disabledSignals: config.disabledSignals,
+      minAssertionsRemoved: cfg.minAssertionsRemoved,
+      minTestsRemoved: cfg.minTestsRemoved,
+      disabledSignals: cfg.disabledSignals,
     })
-    return decide(key, relative, signals, next)
+    return decide(cfg, key, relative, signals, next)
   })
 }

@@ -12,10 +12,12 @@
       "types": "./lib/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./client": "./client.js",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
+    "client.js",
     "cordis.patch.yml",
     "README.md",
     "LICENSE"
@@ -45,6 +47,14 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-plugin-manager"
+      ]
     }
   },
   "peerDependencies": {

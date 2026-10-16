@@ -60,7 +60,9 @@ It works on patterns, not on meaning. If the model changes `toBe(4)` to `toBe(5)
 
 ## Settings
 
-Add a row like this to `~/.dsh/profiles/<profile>/cordis.patch.yml`, or to `~/.dsh/cordis.patch.yml` for every profile. Keys you leave out keep their defaults.
+The easy way: open **Plugins** in DSH's sidebar, click **dsh-protect-tests**, change what you want and press **Save**. It applies to the next tool call, no restart needed.
+
+Or add a row like this to `~/.dsh/profiles/<profile>/cordis.patch.yml`, or to `~/.dsh/cordis.patch.yml` for every profile. Keys you leave out keep their defaults.
 
 ```yaml
 - id: protect-tests
