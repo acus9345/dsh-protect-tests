@@ -1,5 +1,7 @@
 # dsh-protect-tests
 
+English | [中文](README.zh.md)
+
 Tell an agent "make the tests pass" and sometimes it does exactly that, just not the way you meant. A failing test gets `.skip`. An assertion gets commented out. `expect(total).toBe(42)` turns into `expect(total).toBeDefined()`. The run goes green and the bug is still there.
 
 This [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) plugin looks at every edit to a test file before it's applied, comparing the old text with the new. If the change makes the tests check less, the edit is refused and the model is told what it did:
@@ -23,14 +25,14 @@ That's the `web` profile, the browser UI you start with `dsh web`. If you run DS
 
 ### From a clone
 
-Before the package is on npm, or to try local changes, build a tarball and install that:
+To try local changes, build a tarball and install that:
 
 ```sh
 git clone https://github.com/acus9345/dsh-protect-tests
 cd dsh-protect-tests
 npm install
 npm pack
-dsh plugin --profile web add ./dsh-protect-tests-0.1.0.tgz
+dsh plugin --profile web add ./dsh-protect-tests-0.2.0.tgz
 ```
 
 ## What it notices
@@ -40,7 +42,7 @@ dsh plugin --profile web add ./dsh-protect-tests-0.1.0.tgz
 - **Assertions that can't fail.** `expect(true).toBe(true)`, `assert True`, `assertEquals(x, x)`, `assert!(true)`.
 - **Commented-out assertions.**
 - **Swallowed failures.** Wrapping assertions in an empty `catch {}` or `except AssertionError: pass`.
-- **Weaker assertions.** Swapping a specific check for `toBeDefined()`, `toBeTruthy()`, `is not None` and the like.
+- **Weaker assertions.** Swapping a specific check for `toBeDefined()`, `toBeTruthy()`, `assert.ok(x)`, `is not None` and the like.
 - **Deleted test files.** `rm`, `git rm` or `unlink` on a test file or test folder from the shell.
 - **A test script that can't fail.** Changing `"test"` in `package.json` to `echo`, `exit 0`, `... || true`, or adding `--passWithNoTests`.
 
