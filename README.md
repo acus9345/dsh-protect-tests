@@ -1,6 +1,6 @@
 # dsh-protect-tests
 
-English | [中文](README.zh.md)
+English | [中文](README_zh.md)
 
 Tell an agent "make the tests pass" and sometimes it does exactly that, just not the way you meant. A failing test gets `.skip`. An assertion gets commented out. `expect(total).toBe(42)` turns into `expect(total).toBeDefined()`. The run goes green and the bug is still there.
 
