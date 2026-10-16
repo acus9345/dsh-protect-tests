@@ -1,6 +1,6 @@
 {
   "name": "dsh-protect-tests",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DeepSeek Harness plugin that catches an agent weakening tests to make them pass: added skips, deleted assertions or test cases, trivial asserts, swallowed failures, and deleted test files.",
   "license": "MIT",
   "author": "acus9345",
