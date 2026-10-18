@@ -75,7 +75,8 @@ function sse(res: ServerResponse, event: string, data: unknown): void {
 }
 
 function writeTurn(res: ServerResponse, turn: ScriptedTurn, n: number): void {
-  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' })
+  // One connection per request: some VPN and firewall drivers stall reused loopback connections.
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'close' })
   sse(res, 'message_start', {
     type: 'message_start',
     message: {
@@ -125,7 +126,7 @@ export async function startScriptedModel(script: ScriptedTurn[]): Promise<{
   const server = createServer((req, res) => {
     void (async () => {
       if (req.method !== 'POST' || !req.url?.endsWith('/messages')) {
-        res.writeHead(404).end()
+        res.writeHead(404, { connection: 'close' }).end()
         return
       }
       const body = JSON.parse(await readBody(req)) as CapturedRequest & { stream?: boolean }
@@ -243,7 +244,9 @@ function packed(): Promise<string> {
   tarball ??= (async () => {
     const dir = await mkdtemp(join(tmpdir(), 'dsh-pack-'))
     const out = await run('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', dir], { cwd: repoRoot, env: process.env })
-    const [{ filename }] = JSON.parse(out) as Array<{ filename: string }>
+    // npm 10 prints an array; npm 12 prints an object keyed by package name.
+    const parsed = JSON.parse(out) as Array<{ filename: string }> | Record<string, { filename: string }>
+    const { filename } = (Array.isArray(parsed) ? parsed[0] : Object.values(parsed)[0])!
     return join(dir, filename)
   })()
   return tarball
