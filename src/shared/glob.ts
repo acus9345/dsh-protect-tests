@@ -53,7 +53,13 @@ export function globToRegExp(glob: string): RegExp {
     }
     i += 1
   }
-  const compiled = new RegExp(`^${re}$`)
+  if (braces > 0) re += ')'.repeat(braces)
+  let compiled: RegExp
+  try {
+    compiled = new RegExp(`^${re}$`)
+  } catch {
+    compiled = new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+  }
   cache.set(glob, compiled)
   return compiled
 }
@@ -67,7 +73,9 @@ export function globToRegExp(glob: string): RegExp {
 export function matchesAny(path: string, globs: readonly string[]): boolean {
   const normalized = path.replace(/\\/g, '/').replace(/^\.\//, '')
   let matched = false
-  for (const glob of globs) {
+  for (const raw of globs) {
+    const glob = raw.trim()
+    if (glob.length === 0 || glob === '!') continue
     if (glob.startsWith('!')) {
       if (globToRegExp(glob.slice(1)).test(normalized)) matched = false
     } else if (globToRegExp(glob).test(normalized)) {

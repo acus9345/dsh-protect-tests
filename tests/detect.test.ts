@@ -143,3 +143,30 @@ test('PowerShell deletes are seen', () => {
   assert.deepEqual(deletedPaths('Remove-Item -Recurse -Force tests'), ['tests'])
   assert.deepEqual(deletedPaths('rd /s /q __tests__'), ['__tests__'])
 })
+
+test('deletedPaths handles multiline commands, quoted paths with spaces, and comments', () => {
+  assert.deepEqual(deletedPaths('echo hi\nrm src/sum.test.ts'), ['src/sum.test.ts'])
+  assert.deepEqual(deletedPaths('echo hi\n  rm -f tests/a.test.ts'), ['tests/a.test.ts'])
+  assert.deepEqual(deletedPaths('rm "a test/foo.ts"'), ['a test/foo.ts'])
+  assert.deepEqual(deletedPaths('rm "my tests/a.test.ts"'), ['my tests/a.test.ts'])
+  assert.deepEqual(deletedPaths('rm src/a.ts # tests/b.test.ts'), ['src/a.ts'])
+})
+
+test('detectTestScriptTamper handles existing --bail=0, semicolon no-ops, and non-script test keys', () => {
+  assert.equal(detectTestScriptTamper('{"scripts":{"test":"jest --bail=0"}}', '{"scripts":{"test":"jest --bail=0 --verbose"}}'), undefined)
+  assert.ok(detectTestScriptTamper('{"scripts":{"test":"jest"}}', '{"scripts":{"test":"jest; exit 0"}}'))
+  assert.ok(detectTestScriptTamper('{"scripts":{"test":"jest"}}', '{"scripts":{"test":"jest; true"}}'))
+  assert.equal(
+    detectTestScriptTamper(
+      '{"dependencies":{"test":"1.0.0"},"scripts":{"test":"vitest run"}}',
+      '{"dependencies":{"test":"1.0.0"},"scripts":{"test":"vitest run --reporter=verbose"}}',
+    ),
+    undefined,
+  )
+  assert.ok(
+    detectTestScriptTamper(
+      '{"dependencies":{"test":"1.0.0"},"scripts":{"test":"vitest run"}}',
+      '{"dependencies":{"test":"1.0.0"},"scripts":{"test":"echo ok"}}',
+    ),
+  )
+})

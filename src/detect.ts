@@ -186,6 +186,8 @@ export function detectTamper(oldText: string, newText: string, options: TamperOp
   return signals
 }
 
+const NOOP_TEST_FLAG = /--passWithNoTests|--pass-with-no-tests|--bail=0|-k\s+["']?not\b/
+
 /**
  * Detect `package.json` changes that neuter the test script.
  * @param oldText - previous manifest text ('' when new).
@@ -194,13 +196,29 @@ export function detectTamper(oldText: string, newText: string, options: TamperOp
  */
 export function detectTestScriptTamper(oldText: string, newText: string): Signal | undefined {
   const testScript = (text: string): string | undefined => {
+    try {
+      const parsed = JSON.parse(text) as unknown
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const scripts = (parsed as { scripts?: unknown }).scripts
+        if (scripts !== null && typeof scripts === 'object' && !Array.isArray(scripts)) {
+          const test = (scripts as { test?: unknown }).test
+          return typeof test === 'string' ? test : undefined
+        }
+        return undefined
+      }
+    } catch {
+      // Partial edit spans are not valid JSON; fall back to matching `"test": "..."`.
+    }
     const m = /"test"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text)
     return m?.[1]
   }
   const before = testScript(oldText)
   const after = testScript(newText)
   if (after === undefined || after === before) return undefined
-  const noop = /^\s*(?:echo\b[^|&;]*|true|exit 0|:)\s*$/.test(after) || /\|\|\s*(?:true|exit 0|:)\s*$/.test(after) || /--passWithNoTests|--pass-with-no-tests|--bail=0|-k\s+["']?not\b/.test(after) && !(before ?? '').includes(after.match(/--passWithNoTests|--pass-with-no-tests|-k\s+["']?not\b/)?.[0] ?? '\u0000')
+  const flag = after.match(NOOP_TEST_FLAG)?.[0]
+  const noop = /^\s*(?:echo\b[^|&;]*|true|exit 0|:)\s*$/.test(after)
+    || /(?:\|\||;)\s*(?:true|exit 0|:)\s*$/.test(after)
+    || (flag !== undefined && !(before ?? '').includes(flag))
   if (!noop) return undefined
   return { kind: 'skip', detail: `changes the test script from ${JSON.stringify(before ?? '')} to ${JSON.stringify(after)}, which cannot fail`, examples: [] }
 }

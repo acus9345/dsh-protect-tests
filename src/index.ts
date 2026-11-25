@@ -12,7 +12,7 @@
  * @module dsh-protect-tests
  */
 import { createHash } from 'node:crypto'
-import { basename } from 'node:path'
+import { basename, isAbsolute } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
@@ -88,17 +88,22 @@ export function denialText(target: string, signals: readonly Signal[], retryAllo
 /** Paths an `rm`/`git rm`/`unlink` (or PowerShell `Remove-Item`/`del`) command would delete. */
 export function deletedPaths(command: string): string[] {
   const out: string[] = []
-  const re = /(?:^|[;&|(]\s*|\s(?:sudo|xargs)\s+)(?:git\s+rm|rm|unlink|trash|shred|remove-item|ri|del|erase|rd|rmdir)\s+([^;&|)\n]+)/gi
+  const re = /(?:(?:^|[;&|(])\s*|\s(?:sudo|xargs)\s+)(?:git\s+rm|rm|unlink|trash|shred|remove-item|ri|del|erase|rd|rmdir)\s+([^;&|)\n]+)/gim
   for (const m of command.matchAll(re)) {
-    for (const word of m[1]!.trim().split(/\s+/)) {
-      const w = word.replace(/^['"]|['"]$/g, '')
-      if (w.length === 0 || w.startsWith('-') || w.startsWith('/') && /^\/[a-z]$/i.test(w) || w === '--' || /^[<>]/.test(w)) continue
+    for (const tok of m[1]!.matchAll(/"([^"]*)"|'([^']*)'|(\S+)/g)) {
+      const unquoted = tok[3]
+      if (unquoted !== undefined && unquoted.startsWith('#')) break
+      const w = tok[1] ?? tok[2] ?? unquoted ?? ''
+      if (w.length === 0 || w.startsWith('-') || (w.startsWith('/') && /^\/[a-z]$/i.test(w)) || w === '--' || /^[<>]/.test(w)) continue
       // `.\\tests\\a.test.ts` and `tests/a.test.ts` are the same path to us.
       out.push(w.replaceAll('\\', '/'))
     }
   }
   return out
 }
+
+const isInsideWorkspace = (rel: string): boolean =>
+  rel !== '..' && !rel.startsWith('../') && !isAbsolute(rel) && !/^[a-zA-Z]:\//.test(rel)
 
 export function apply(ctx: Context, config: Config): void {
   const pending = new Set<string>()
@@ -118,15 +123,26 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.on('tools/pre-execute', async (exec: ToolExecution, next: () => Promise<PreToolDecision>) => {
     const cfg = resolveConfig(config)
-    const isTestFile = (rel: string): boolean => !rel.startsWith('../') && matchesAny(rel, cfg.testFiles)
+    const isTestFile = (rel: string): boolean => isInsideWorkspace(rel) && matchesAny(rel, cfg.testFiles)
+    const isTestTarget = (rel: string): boolean => {
+      const dir = rel.replace(/\/+$/, '')
+      // Probe directories with a neutral name so `*.test.*` does not match non-test files/dirs.
+      return isTestFile(rel) || (dir.length > 0 && isTestFile(`${dir}/__dir_probe__`))
+    }
     const key = createHash('sha256').update(`${exec.name}\0${canonicalJson(exec.arguments)}\0${workspaceOf(exec)}`).digest('hex')
     if (cfg.allowIdenticalRetry && pending.delete(key)) return next()
 
     if (cfg.shellTools.includes(exec.name) && cfg.guardDeletes) {
-      const command = (exec.arguments as { command?: unknown } | null)?.command
+      const args = exec.arguments as { command?: unknown; workdir?: unknown } | null
+      const command = args?.command
       if (typeof command !== 'string') return next()
       const workspace = workspaceOf(exec)
-      const hits = deletedPaths(command).map(p => resolvePath(p, workspace).relative).filter(rel => isTestFile(rel) || isTestFile(`${rel}/x.test.js`) || /(^|\/)(tests?|__tests__|spec)$/.test(rel))
+      const baseDir = typeof args?.workdir === 'string' && args.workdir.trim().length > 0
+        ? resolvePath(args.workdir, workspace).absolute
+        : workspace
+      const hits = deletedPaths(command)
+        .map(p => resolvePath(resolvePath(p, baseDir).absolute, workspace).relative)
+        .filter(isTestTarget)
       if (hits.length === 0) return next()
       return decide(cfg, key, `\`${command}\``, [{ kind: 'fewer-tests', detail: `deletes test files: ${hits.slice(0, 5).join(', ')}`, examples: [] }], next)
     }
@@ -137,8 +153,16 @@ export function apply(ctx: Context, config: Config): void {
     const previous = mutation.kind === 'write' ? (await readExisting(absolute, cfg.maxFileBytes)) ?? '' : mutation.oldText ?? ''
 
     if (cfg.guardTestScript && basename(relative) === 'package.json') {
-      // Edits carry only a span; compare the span or the whole manifest.
-      const signal = detectTestScriptTamper(previous, mutation.newText)
+      let signal: Signal | undefined
+      if (mutation.kind === 'edit' && previous.length > 0) {
+        const existing = await readExisting(absolute, cfg.maxFileBytes)
+        if (existing !== undefined && existing.includes(previous)) {
+          const replaceAll = (exec.arguments as { replace_all?: unknown } | null)?.replace_all === true
+          const updated = replaceAll ? existing.replaceAll(previous, () => mutation.newText) : existing.replace(previous, () => mutation.newText)
+          signal = detectTestScriptTamper(existing, updated)
+        }
+      }
+      signal ??= detectTestScriptTamper(previous, mutation.newText)
       return decide(cfg, key, relative, signal === undefined ? [] : [signal], next)
     }
     if (!isTestFile(relative)) return next()

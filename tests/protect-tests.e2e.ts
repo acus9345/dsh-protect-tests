@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { pluginEntry, runDsh } from './helpers/dsh.ts'
+import { pluginEntry, runDsh, shellTool } from './helpers/dsh.ts'
 
 const plugin = { id: 'protect-tests', entry: pluginEntry }
 const spec = "import { sum } from './sum'\n\ntest('adds', () => {\n  expect(sum(1, 2)).toBe(3)\n})\n"
@@ -58,4 +58,40 @@ test('guards the pwsh tool too (the shell DSH uses on Windows)', async () => {
   assert.equal(run.exitCode, 0, run.stderr)
   assert.match(run.toolResults[0]!.result, /protect-tests blocked/)
   assert.equal(run.filesAfter['src/sum.test.ts'], spec)
+})
+
+test('deleting non-test files is allowed, while workdir-relative test deletes are blocked', async () => {
+  const run = await runDsh({
+    plugins: [plugin],
+    files: { 'src/helper.ts': 'export const x = 1\n', 'tests/unit.ts': 'export const y = 1\n', 'dist/out.js': 'console.log(1)\n' },
+    readAfter: ['tests/unit.ts'],
+    script: [
+      { tool: 'bash', input: { description: 'Delete non-test file', command: 'rm src/helper.ts' } },
+      { tool: 'bash', input: { description: 'Delete build dir', command: shellTool === 'pwsh' ? 'Remove-Item -Recurse -Force dist' : 'rm -rf dist' } },
+      { tool: 'bash', input: { description: 'Delete inside tests workdir', workdir: 'tests', command: 'rm unit.ts' } },
+    ],
+  })
+  assert.equal(run.exitCode, 0, run.stderr)
+  assert.equal(run.toolResults[0]!.status, 'completed')
+  assert.doesNotMatch(run.toolResults[0]!.result, /protect-tests blocked/)
+  assert.equal(run.toolResults[1]!.status, 'completed')
+  assert.doesNotMatch(run.toolResults[1]!.result, /protect-tests blocked/)
+  assert.match(run.toolResults[2]!.result, /deletes test files: tests\/unit\.ts/)
+  assert.equal(run.filesAfter['tests/unit.ts'], 'export const y = 1\n')
+})
+
+test('neutering package.json test script via a narrow edit span is blocked', async () => {
+  const pkg = '{\n  "name": "demo",\n  "scripts": {\n    "test": "vitest run"\n  }\n}\n'
+  const run = await runDsh({
+    plugins: [plugin],
+    files: { 'package.json': pkg },
+    readAfter: ['package.json'],
+    script: [
+      { tool: 'read', input: { file_path: 'package.json' } },
+      { tool: 'edit', input: { file_path: 'package.json', old_string: '"vitest run"', new_string: '"echo ok"' } },
+    ],
+  })
+  assert.equal(run.exitCode, 0, run.stderr)
+  assert.match(run.toolResults[1]!.result, /protect-tests blocked this change to package\.json/)
+  assert.equal(run.filesAfter['package.json'], pkg)
 })

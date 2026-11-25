@@ -43,7 +43,9 @@ export function fileMutation(exec: Pick<ToolExecution, 'name' | 'arguments'>): F
     const command = str('command')
     if (path === undefined) return undefined
     if (command === 'create' && str('file_text') !== undefined) return { path, kind: 'write', newText: str('file_text')! }
-    if (command === 'str_replace' && str('new_str') !== undefined) return { path, kind: 'edit', newText: str('new_str')!, oldText: str('old_str') ?? '' }
+    if (command === 'str_replace' && (str('new_str') !== undefined || str('old_str') !== undefined)) {
+      return { path, kind: 'edit', newText: str('new_str') ?? '', oldText: str('old_str') ?? '' }
+    }
     if (command === 'insert' && str('new_str') !== undefined) return { path, kind: 'edit', newText: str('new_str')!, oldText: '' }
   }
   return undefined
